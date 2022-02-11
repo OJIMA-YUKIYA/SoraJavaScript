@@ -1,0 +1,180 @@
+<html lang="ja">
+    <head>
+        <meta charset="utf-8" />
+    </head>
+    <body>
+        <button onclick="connect_clicked()">接続</button>
+        <!-- <button onclick="disconnect_clicked()">切断</button> -->
+        <br><br>
+        <!-- <input type="text" id="message_input" /> -->
+        <!-- <button onclick="sendDataChannel()">sendMessage</button><br><br> -->
+        加速度 (> 0)　　　　<input type="range" id="accel_text" onchange="cal_velocity_plan()" min="0.05" max="0.5" step="0.05" value="0.05" oninput="this.nextElementSibling.value = this.value"><output>0.05</output> (m/s^2) <br>
+        最高速度　 　　　　<input type="range" id="max_velocity_text" onchange="cal_velocity_plan()" min="0.05" max="1.0" step="0.05" value="0.05" oninput="this.nextElementSibling.value = this.value"><output>0.05</output> (m/s) <br>
+        最高速度で走る時間 <input type="range" id="T2_text" onchange="cal_velocity_plan()" min="0.5" max="10" step="0.5" value="0.5" oninput="this.nextElementSibling.value = this.value"><output>0.5</output> (s) <br>
+        <input type="radio" name="q1" checked> 前進
+        <input type="radio" name="q1"> 後退
+        <pre><div id="result_velocity_plan"></div></pre>
+        <input type="button" onclick="sendDataChannel();" value="送信">　　<input type="button" onclick="quit_accel_cmd();" value="強制終了"><br><br>
+        <h4>joystick</h4>
+        反時計周り<input type="range" id="leftright" max="50" min="-50" step="0.000001" value="0"></input><div id="leftright_out" style="display: inline-block; _display: inline;">0</div>(deg/sec)<br>
+        前方　　　<input type="range" id="frontrear" max="0.7" min="-0.7" step="0.000001" value="0"></input><div id="frontrear_out" style="display: inline-block; _display: inline;">0</div>(m/sec)<br><br>
+        <!-- <video id="local-video" autoplay="" playsinline="" controls="" muted=""></video> -->
+        <pre><div id="getMessage" value=''></div></pre>
+        <hr />
+        <div id="remote-videos">
+        </div>
+        <!-- <script type="text/javascript" src="./js/sora.min.js"></script> -->
+        <script type="text/javascript" src="./js/sora.js"></script>
+        <script type="text/javascript">
+            const debug = true;
+            const sora = Sora.connection("wss://sora.ikeilabsora.0am.jp/signaling", debug);
+            const channelId = "ojima-sora";
+            // const channelId = "ojima-sora";
+            // const metadata = {
+            //     "signaling_key":"cc-wCKCRiRxE6OOsD3kQ2w4Gd4rkPEFoYtSB5t4NwepM9N4p"
+            // };
+            const options = {
+                multistream : true,
+                video : true,
+                audio : true,
+                dataChannelSignaling : true,
+                dataChannels : [
+                    {
+                        label : "#sora-devtools",
+                        direction : "sendrecv"
+                    }
+                ]
+            };
+            const recvonly = sora.recvonly(channelId, null, options);
+
+            recvonly.on("track", (event) => {
+                const stream = event.streams[0];
+                if (!document.querySelector(`#remote-video-${stream.id}`)) {
+                    const video = document.createElement("video");
+                    video.id = `remote-video-${stream.id}`;
+                    video.autoplay = true;
+                    video.playsinline = true;
+                    video.srcObject = stream;
+                    document.querySelector("#remote-videos").appendChild(video);
+                }
+            });
+
+            recvonly.on("removetrack", (event) => {
+                if (document.querySelector(`#remote-video-${event.target.id}`)) {
+                    document.querySelector(`#remote-video-${event.target.id}`).remove();
+                }
+            });
+
+            const get_message_target = document.getElementById("getMessage");
+            recvonly.on('message', (event) => {
+                let msg = new TextDecoder().decode(event.data);
+                console.log('recieve: ' + msg);
+                get_message_target.innerHTML = msg;
+            });
+
+            const target = document.getElementById("message_input");
+            function sendDataChannel() {
+                console.log('send: ' + target.value);
+                recvonly.sendMessage('#sora-devtools', new TextEncoder().encode(target.value));
+                target.value = '';
+            }
+
+            function connect_clicked() {
+                recvonly.connect();
+            }
+
+            const T2_Input = document.getElementById('T2_text');
+            const accel_Input = document.getElementById('accel_text');
+            const max_velocity_Input = document.getElementById('max_velocity_text');
+            const reverse_Input = document.getElementsByName('q1');
+            const leftright_progress = document.getElementById('leftright');
+            function cal_velocity_plan() {
+                let a = parseFloat(accel_Input.value);
+                let vel_limit = parseFloat(max_velocity_Input.value);
+                let T2 = parseFloat(T2_Input.value);
+                let T1 = vel_limit / a;
+                let T3 = vel_limit / a;
+                let x =  (T2 + (T1 + T2 + T3)) * vel_limit / 2.0;
+                document.getElementById("result_velocity_plan").innerHTML =
+                  "total_time: " + (T1 + T2 + T3).toFixed(6) + " (s)\n"
+                + "         x: " + x.toFixed(6) + " (m)\n"
+                + "        T1: " + T1.toFixed(6) + " (s)\n"
+                + "        T2: " + T2.toFixed(6) + " (s)\n"
+                + "        T3: " + T3.toFixed(6) + " (s)";
+            }
+
+            function sendDataChannel() {
+                // console.log("hello");
+                // if (accel_Input.value ==  || max_velocity_Input.value == NULL) {
+                //     let target = document.getElementById("warning");
+                //     target.innerHTML = "両方入力してください。";
+                //     accel_Input.value = "";
+                //     max_velocity_Input.value = "";
+                //     return;
+                // }
+                // let target = document.getElementById("warning");
+                // target.innerHTML = "";
+                let textData = "acce" + T2_Input.value + "," + accel_Input.value + "," + max_velocity_Input.value + ",";
+                if (reverse_Input[0].checked) {
+                    textData = textData + 0;
+                }
+                else {
+                    textData = textData + 1;
+                }
+                console.log("send: " + textData);
+                if (textData.length == 0) {
+                    return;
+                }
+                // dataChannel.send(new TextEncoder().encode(textData));
+                recvonly.sendMessage('#sora-devtools', new TextEncoder().encode(textData));
+                // accel_Input.value = "";
+                // max_velocity_Input.value = "";
+            }
+
+            // joystick
+
+            window.addEventListener("gamepadconnected", function(e) {
+                // gp = navigator.getGamepads()[e.gamepad.index];
+                console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
+                e.gamepad.index, e.gamepad.id,
+                e.gamepad.buttons.length, e.gamepad.axes.length);
+                setInterval(gameLoop, 1000.0/20.0);
+                gameLoop();
+            });
+            function gameLoop() {
+                let gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads : []);
+                let gp = gamepads[0];
+                if (gp != null) {
+                    let ang = -50*gp.axes[0];
+                    let lin = -0.8*gp.axes[3];
+                    document.getElementById('leftright').value = ang;
+                    document.getElementById('leftright_out').innerHTML = ang.toFixed(3);
+                    document.getElementById('frontrear').value = lin;
+                    document.getElementById('frontrear_out').innerHTML = lin.toFixed(3);
+
+                    // console.log("jyja" + ang.toFixed(3) + "," + lin.toFixed(3));
+
+
+                        recvonly.sendMessage("#sora-devtools", new TextEncoder().encode("jyja" + ang.toFixed(3) + "," + lin.toFixed(3) + "\n"));
+
+                }
+            }
+
+            //
+            // function disconnect_clicked() {
+            //     recvonly.disconnect();
+            // }
+
+            // navigator.mediaDevices
+            // .getUserMedia({ audio: true, video: true })
+            // .then((stream) => sendrecv.connect(stream))
+            // .then((stream) => {
+            //   document.querySelector("#local-video").srcObject = stream;
+            //
+            // })
+            // .catch((e) => {
+            //   console.error(e);
+            // });
+    </script>
+  </body>
+</html>
