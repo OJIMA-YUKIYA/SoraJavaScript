@@ -87,7 +87,7 @@
             const get_message_target = document.getElementById("getMessage");
             recvonly.on('message', (event) => {
                 let msg = new TextDecoder().decode(event.data);
-                console.log('recieve: ' + msg);
+                console.log('label:' + event.label + '  recieve: ' + msg);
                 get_message_target.innerHTML = msg;
             });
 
